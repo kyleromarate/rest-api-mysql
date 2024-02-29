@@ -1,81 +1,99 @@
-import { Products, UnitProduct } from "./product.interface";
-import { Product } from "./product.interface";
+import { Product, Products, UnitProduct } from "./product.interface";
 import { v4 as random } from "uuid";
-import fs from "fs";
+import mysql from "mysql";
 
-let products: Products = loadProducts();
+const connection = mysql.createConnection({
+  host: "localhost",
+  user: "root",
+  password: "",
+  database: "rest_api_new", 
+});
 
-function loadProducts(): Products {
- try {
-    const data = fs.readFileSync("./products.json", "utf-8");
-    return JSON.parse(data);
- } catch (error) {
-    console.log(`Error ${error}`);
-    return {};
- }
-}
+connection.connect((err) => {
+  if (err) {
+    console.error("Error connecting to MySQL:", err);
+    return;
+  }
+  console.log("Connected to MySQL database!");
+});
 
-function saveProducts() {
-    try {
-        fs.writeFileSync("./products.json", JSON.stringify(products), "utf-8");
-        console.log("Products save successfully!")
-   } catch (error) {
-        console.log("Error", error)
-   }
-}
+export const findAll = async (): Promise<UnitProduct[]> => {
+  const query = "SELECT * FROM products";
+  return new Promise((resolve, reject) => {
+    connection.query(query, (error, results: UnitProduct[]) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve(results);
+      }
+    });
+  });
+};
 
-export const findAll = async () : Promise<UnitProduct[]> => Object.values(products)
+export const findOne = async (id: string): Promise<UnitProduct | null> => {
+  const query = "SELECT * FROM products WHERE id = ?";
+  return new Promise((resolve, reject) => {
+    connection.query(query, [id], (error, results: UnitProduct[]) => {
+      if (error) {
+        reject(error);
+      } else {
+        if (results.length === 0) {
+          resolve(null);
+        } else {
+          resolve(results[0]);
+        }
+      }
+    });
+  });
+};
 
-export const findOne = async (id : string) : Promise<UnitProduct> => products[id]
+export const create = async (productInfo: Product): Promise<UnitProduct | null> => {
+  const id = random();
+  const newProduct: UnitProduct = { id, ...productInfo };
+  const query = "INSERT INTO products SET ?";
+  return new Promise((resolve, reject) => {
+    connection.query(query, newProduct, (error) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve(newProduct);
+      }
+    });
+  });
+};
 
-export const create = async (productInfo : Product) : Promise<null | UnitProduct> => {
+export const update = async (
+  id: string,
+  updateValues: Partial<Product>
+): Promise<UnitProduct | null> => {
+  const product = await findOne(id);
+  if (!product) {
+    return null;
+  }
+  const updatedProduct: UnitProduct = { ...product, ...updateValues };
+  const query = "UPDATE products SET ? WHERE id = ?";
+  return new Promise((resolve, reject) => {
+    connection.query(query, [updatedProduct, id], (error) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve(updatedProduct);
+      }
+    });
+  });
+};
 
-    let id = random()
+export const remove = async (id: string): Promise<void> => {
+  const query = "DELETE FROM products WHERE id = ?";
+  return new Promise((resolve, reject) => {
+    connection.query(query, [id], (error) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve();
+      }
+    });
+  });
+};
 
-    let product = await findOne(id)
-
-    while (product) {
-        id = random ()
-        await findOne(id)
-    }
-
-    products[id] = {
-        id : id,
-        ...productInfo
-    }
-
-    saveProducts()
-
-    return products[id]
-}
-
-export const update = async (id : string, updateValues : Product) : Promise<UnitProduct | null> => {
-
-    const product = await findOne(id)
-
-    if (!product){
-        return null
-    }
-
-    products[id] = {
-        id,
-        ...updateValues
-    }
-
-    saveProducts()
-
-    return products[id]
-}
-
-export const remove = async (id : string) : Promise<null | void> => {
-
-    const product = await findOne(id)
-
-    if (!product){
-        return null
-    }
-
-    delete products[id]
-
-    saveProducts()
-}
+export default connection; // Export the MySQL connection
